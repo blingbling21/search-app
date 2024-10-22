@@ -2,7 +2,12 @@ use std::sync::Arc;
 
 use error::AppResult;
 use log::{error, info};
-use tauri::{generate_handler, AppHandle, WebviewWindowBuilder};
+use tauri::{
+    generate_handler,
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    AppHandle, WebviewWindowBuilder,
+};
 
 mod error;
 
@@ -17,6 +22,24 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            ///// 下面是托盘菜单
+            let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&quit])?;
+            TrayIconBuilder::new()
+                .menu(&menu)
+                .menu_on_left_click(true)
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        info!("托盘退出按钮被点击了。");
+                        app.exit(0);
+                    }
+                    _ => {
+                        println!("托盘按钮{:?}没有句柄", event.id);
+                    }
+                })
+                .build(app)?;
+            /////////////////////////////////
             Ok(())
         })
         .invoke_handler(generate_handler![test])
