@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use error::AppResult;
+use error::{AppError, AppResult};
 use log::{error, info};
 use tauri::{
     generate_handler,
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, WebviewWindowBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    App, AppHandle, WebviewWindowBuilder,
 };
 
 mod error;
@@ -23,28 +23,50 @@ pub fn run() {
                 )?;
             }
             ///// 下面是托盘菜单
-            let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit])?;
-            TrayIconBuilder::new()
-                .menu(&menu)
-                .menu_on_left_click(true)
-                .icon(app.default_window_icon().unwrap().clone())
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => {
-                        info!("托盘退出按钮被点击了。");
-                        app.exit(0);
-                    }
-                    _ => {
-                        println!("托盘按钮{:?}没有句柄", event.id);
-                    }
-                })
-                .build(app)?;
+            tray_setting(app)?;
             /////////////////////////////////
             Ok(())
         })
         .invoke_handler(generate_handler![test])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 托盘设置
+fn tray_setting(app: &mut App) -> AppResult<()> {
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&quit])?;
+
+    let icon = app.default_window_icon().ok_or(AppError::TauriError("获取窗口默认icon失败".to_string()))?.clone();
+
+    TrayIconBuilder::new()
+        .menu(&menu)
+        .menu_on_left_click(false)
+        .icon(icon)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "quit" => {
+                info!("托盘退出按钮被点击了。");
+                app.exit(0);
+            }
+            _ => {
+                println!("托盘按钮{:?}没有句柄", event.id);
+            }
+        })
+        .on_tray_icon_event(|tary, event| match event {
+            TrayIconEvent::Click { id, position, rect, button, button_state } => {
+                if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                    info!("鼠标左键点击了托盘icon");
+                }
+            },
+            // tauri::tray::TrayIconEvent::DoubleClick { id, position, rect, button } => todo!(),
+            // tauri::tray::TrayIconEvent::Enter { id, position, rect } => todo!(),
+            // tauri::tray::TrayIconEvent::Move { id, position, rect } => todo!(),
+            // tauri::tray::TrayIconEvent::Leave { id, position, rect } => todo!(),
+            _ => info!("未处理的其他托盘icon事件"),
+        })
+        .build(app)?;
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -54,6 +76,7 @@ async fn test(app: AppHandle) -> AppResult<()> {
             .title("search")
             .center()
             .always_on_top(true)
+            .focused(true)
             .transparent(true)
             .decorations(false)
             .build()?;
