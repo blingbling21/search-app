@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.3",
+    "@tauri-apps/plugin-global-shortcut": "~2",
     "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18"

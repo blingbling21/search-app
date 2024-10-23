@@ -1,3 +1,5 @@
 export default function Search() {
-    return <div className="">search</div>
+    return <div className=" bg-gray-100 h-20">
+      <input type="text" />
+    </div>
 }
