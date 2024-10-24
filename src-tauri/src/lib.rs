@@ -3,10 +3,7 @@ use std::sync::Arc;
 use error::{AppError, AppResult};
 use log::{error, info};
 use tauri::{
-    generate_handler,
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    App, AppHandle, Manager, PhysicalPosition, Position, WebviewWindowBuilder,
+    generate_handler, menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, App, AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, WebviewWindow, WebviewWindowBuilder
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
@@ -33,7 +30,7 @@ pub fn run() {
             /////////////////////////////////
             Ok(())
         })
-        // .invoke_handler(generate_handler![test])
+        .invoke_handler(generate_handler![test])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -65,9 +62,9 @@ fn tray_setting(app: &mut App) -> AppResult<()> {
         })
         .on_tray_icon_event(|tary, event| match event {
             TrayIconEvent::Click {
-                id,
-                position,
-                rect,
+                id: _,
+                position: _,
+                rect: _,
                 button,
                 button_state,
             } => {
@@ -76,6 +73,7 @@ fn tray_setting(app: &mut App) -> AppResult<()> {
                     let search_window = tary.app_handle().get_webview_window("search").unwrap();
                     search_window.show().unwrap();
                     search_window.set_focus().unwrap();
+                    emit_search_focus(&search_window);
                 }
             }
             // tauri::tray::TrayIconEvent::DoubleClick { id, position, rect, button } => todo!(),
@@ -111,8 +109,6 @@ fn create_search_window(app: &mut App) -> AppResult<()> {
         search_webview_window.set_position(Position::Physical(PhysicalPosition::new(x, y)))?;
     }
 
-    // search_webview_window.set_ignore_cursor_events(true)?;
-
     let search_webview_window_rc = Arc::new(search_webview_window);
     let search_webview_window_rc_clone = Arc::clone(&search_webview_window_rc);
 
@@ -141,13 +137,32 @@ fn shortcut_setting(app: &mut App) -> AppResult<()> {
         ctrl_r_shortcut, is_register
     );
     app.global_shortcut()
-        .on_shortcut(ctrl_r_shortcut, move |app_handle, shortcut, event| {
+        .on_shortcut(ctrl_r_shortcut, move |app_handle, shortcut, _event| {
             if shortcut == &ctrl_r_shortcut {
                 info!("按下了全局快捷键ctrl+r");
                 let search_window = app_handle.get_webview_window("search").unwrap();
                 search_window.show().unwrap();
                 search_window.set_focus().unwrap();
+                emit_search_focus(&search_window);
             }
         })?;
     Ok(())
+}
+
+/// 前端页面size变化时，设置窗口的size
+#[tauri::command]
+fn test(app: AppHandle, width: u32, height: u32) -> AppResult<()> {
+    info!("width: {}, height: {}", width, height);
+    let Some(search_window) = app.get_webview_window("search") else {
+        return Err(AppError::TauriError("获取search window失败".to_string()));
+    };
+    search_window.set_size(PhysicalSize::new(width, height))?;
+    Ok(())
+}
+
+/// 触发前端input框focus
+fn emit_search_focus(search_window: &WebviewWindow) {
+    if let Err(err) = search_window.emit("search-focus", ()) {
+        error!("发送search-focus事件失败: {:?}", err);
+    }
 }

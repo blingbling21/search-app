@@ -18,25 +18,43 @@ import {
   Smile,
   User,
 } from "lucide-react";
-import { webviewWindow } from "@tauri-apps/api";
+import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 
 export default function Search() {
-  // 鼠标进入时取消鼠标穿透
-  const onMouseEnter = async () => {
-    const current = webviewWindow.getCurrentWebviewWindow();
-    await current.setIgnoreCursorEvents(false);
-  };
-  // 鼠标离开时启用鼠标穿透
-  const onMouseLeave = async () => {
-    const current = webviewWindow.getCurrentWebviewWindow();
-    await current.setIgnoreCursorEvents(true);
-  };
+  useEffect(() => {
+    const searchDiv = document.querySelector("#search") as HTMLDivElement;
+    const resizeObserver = new ResizeObserver(async (entries) => {
+      if (!Array.isArray(entries) || !entries.length) return;
+      for (const element of entries) {
+        await invoke("test", {
+          width: element.contentRect.width,
+          height: element.contentRect.height,
+        });
+      }
+    });
+    resizeObserver.observe(searchDiv);
+    return () => {
+      resizeObserver.unobserve(searchDiv);
+    };
+  }, []);
+
+  const listenInput = () => {
+    if (typeof window === "undefined") return;
+    listen("search-focus", () => {
+      const searchInput = document.querySelector("input") as HTMLInputElement;
+      console.log("searchInput: ", searchInput);
+      searchInput.focus();
+    });
+  }
+
+  listenInput();
 
   return (
     <Command
-      className="rounded-lg border shadow-md md:min-w-[450px]"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      id="search"
+      className="rounded-lg bordfer shadow-mdf md:min-w-[450px]"
     >
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
