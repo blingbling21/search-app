@@ -30,7 +30,7 @@ pub fn run() {
             /////////////////////////////////
             Ok(())
         })
-        .invoke_handler(generate_handler![test])
+        .invoke_handler(generate_handler![set_window_size, send_search_result])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -151,7 +151,7 @@ fn shortcut_setting(app: &mut App) -> AppResult<()> {
 
 /// 前端页面size变化时，设置窗口的size
 #[tauri::command]
-fn test(app: AppHandle, width: u32, height: u32) -> AppResult<()> {
+fn set_window_size(app: AppHandle, width: u32, height: u32) -> AppResult<()> {
     info!("width: {}, height: {}", width, height);
     let Some(search_window) = app.get_webview_window("search") else {
         return Err(AppError::TauriError("获取search window失败".to_string()));
@@ -165,4 +165,10 @@ fn emit_search_focus(search_window: &WebviewWindow) {
     if let Err(err) = search_window.emit("search-focus", ()) {
         error!("发送search-focus事件失败: {:?}", err);
     }
+}
+
+/// 根据前端传入的search_value，返回搜索结果
+#[tauri::command]
+fn send_search_result(search_value: String) {
+    info!("搜索的search_value: {}", search_value);
 }
