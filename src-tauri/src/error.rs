@@ -1,3 +1,5 @@
+use std::io;
+
 use serde::Serialize;
 use thiserror::Error;
 
@@ -7,6 +9,8 @@ pub enum AppError {
     TauriError(String),
     #[error("tauri global shortcut error: {0}")]
     TauriShortcutError(#[from] tauri_plugin_global_shortcut::Error),
+    #[error("io error: {0}")]
+    IOError(String),
     #[error("other error {0}")]
     OtherError(String),
 }
@@ -20,6 +24,12 @@ impl From<anyhow::Error> for AppError {
 impl From<tauri::Error> for AppError {
     fn from(err: tauri::Error) -> Self {
         AppError::TauriError(err.to_string())
+    }
+}
+
+impl From<io::Error> for AppError {
+    fn from(err: io::Error) -> Self {
+        AppError::IOError(err.to_string())
     }
 }
 

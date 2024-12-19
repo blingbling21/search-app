@@ -1,11 +1,15 @@
-use std::sync::Arc;
+use std::{fs, path::Path, process::Command, sync::Arc};
 
 use error::{AppError, AppResult};
-use log::{error, info};
 use tauri::{
-    generate_handler, menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, App, AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, WebviewWindow, WebviewWindowBuilder
+    generate_handler,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    App, AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, WebviewWindow,
+    WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tracing::{error, info};
 
 mod error;
 
@@ -15,11 +19,11 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
+                // app.handle().plugin(
+                //     tauri_plugin_log::Builder::default()
+                //         .level(log::LevelFilter::Info)
+                //         .build(),
+                // )?;
             }
             ///// 创建并设置search window
             create_search_window(app)?;
@@ -30,7 +34,11 @@ pub fn run() {
             /////////////////////////////////
             Ok(())
         })
-        .invoke_handler(generate_handler![test])
+        .invoke_handler(generate_handler![
+            window_resize,
+            get_search_result,
+            execute_app
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -116,6 +124,9 @@ fn create_search_window(app: &mut App) -> AppResult<()> {
         tauri::WindowEvent::Focused(focus) => {
             if !focus {
                 if let Ok(_) = search_webview_window_rc_clone.hide() {
+                    if let Err(err) = search_webview_window_rc_clone.emit("hidewindow", ()) {
+                        error!("发送hidewindow事件失败: {:?}", err);
+                    }
                     info!("隐藏search窗口");
                 } else {
                     error!("隐藏search窗口失败");
@@ -151,7 +162,7 @@ fn shortcut_setting(app: &mut App) -> AppResult<()> {
 
 /// 前端页面size变化时，设置窗口的size
 #[tauri::command]
-fn test(app: AppHandle, width: u32, height: u32) -> AppResult<()> {
+fn window_resize(app: AppHandle, width: u32, height: u32) -> AppResult<()> {
     info!("width: {}, height: {}", width, height);
     let Some(search_window) = app.get_webview_window("search") else {
         return Err(AppError::TauriError("获取search window失败".to_string()));
@@ -165,4 +176,61 @@ fn emit_search_focus(search_window: &WebviewWindow) {
     if let Err(err) = search_window.emit("search-focus", ()) {
         error!("发送search-focus事件失败: {:?}", err);
     }
+}
+
+/// 根据搜索值返回对应的软件名称列表
+#[tauri::command]
+fn get_search_result(search_value: String) -> AppResult<Vec<String>> {
+    if search_value == "" {
+        return Ok(vec![]);
+    }
+    info!("输入的搜索值：{}", search_value);
+    let path = Path::new("E:\\项目\\search-app\\startupapp");
+    if !path.is_dir() {
+        return Err(AppError::OtherError("配置目录不存在".to_string()));
+    }
+    let mut list = vec![];
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let Ok(file_name) = entry.file_name().into_string() else {
+            return Err(AppError::OtherError("字符串转换时出错".to_string()));
+        };
+        let file_type = entry.file_type()?;
+        let file_meta = entry.metadata()?;
+        info!("file_name: {:?}", file_name);
+        info!("file_type: {:?}", file_type);
+        info!("file_meta: {:?}", file_meta);
+        info!(
+            "file_name.contains(&search_value): {}",
+            file_name.contains(&search_value)
+        );
+        if file_name.contains(&search_value) {
+            list.push(file_name);
+        }
+    }
+    info!("list: {:?}", list);
+    Ok(list)
+}
+
+#[tauri::command]
+fn execute_app(app: AppHandle, app_name: String) -> AppResult<()> {
+    let Some(search_window) = app.get_webview_window("search") else {
+        return Err(AppError::TauriError("获取search window失败".to_string()));
+    };
+    if let Ok(_) = search_window.hide() {
+        if let Err(err) = search_window.emit("hidewindow", ()) {
+            error!("发送hidewindow事件失败: {:?}", err);
+        }
+        info!("隐藏search窗口");
+    } else {
+        error!("隐藏search窗口失败");
+    }
+    
+    let app_path = format!("E:\\\\项目\\\\search-app\\\\startupapp\\\\{}", app_name);
+    info!("app_path: {}", app_path);
+    let output = Command::new("cmd")
+        .args(["/C", "start", "", &app_path])
+        .output()?;
+    info!("output: {:?}", output);
+    Ok(())
 }
