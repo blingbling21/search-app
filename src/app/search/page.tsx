@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/command";
 // import { Calculator, Calendar, Smile } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 type CatchError = {
@@ -18,7 +18,10 @@ type CatchError = {
 export default function Search() {
   const [searchValue, setSearchValue] = useState<string>("");
   const [app, setApp] = useState<string[]>([]);
+  const [selectRow, setSelectRow] = useState<number>(-1);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const appItemsRef = useRef<HTMLDivElement[]>([]);
 
   /**
    * 下面的代码的功能是监听#search的size变化，并将变化后的size传后rust端
@@ -77,17 +80,75 @@ export default function Search() {
       } catch (error) {
         console.log("error: ", (error as CatchError).OtherError);
       }
-    }, 500);
+    }, 200);
   };
 
   useEffect(() => {
     search(searchValue);
   }, [searchValue]);
 
+  const changeSelectedRow = useCallback(
+    (e: KeyboardEvent) => {
+      console.log("e: ", e.code);
+      console.log("selectRow: ", selectRow);
+      if (app.length > 0) {
+        if (e.code === "ArrowUp" && selectRow > 0) {
+          setSelectRow(selectRow - 1);
+        } else if (e.code === "ArrowDown" && selectRow < app.length - 1) {
+          setSelectRow(selectRow + 1);
+        }
+      }
+    },
+    [selectRow, app]
+  );
+
+  useEffect(() => {
+    document.addEventListener("keydown", changeSelectedRow);
+    return () => {
+      document.removeEventListener("keydown", changeSelectedRow);
+    };
+  }, [changeSelectedRow]);
+
+  useEffect(() => {
+    if (app.length > 0) {
+      setSelectRow(0);
+    } else {
+      setSelectRow(-1);
+    }
+  }, [app]);
+
+  useEffect(() => {
+    console.log("selectRow: ", selectRow);
+    if (selectRow >= 0 && appItemsRef.current[selectRow]) {
+      appItemsRef.current[selectRow].scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [selectRow]);
+
   const executeApp = async (appName: string) => {
     if (typeof window === "undefined") return;
     await invoke("execute_app", { appName });
   };
+
+  const pressEnter = useCallback(
+    (e: KeyboardEvent) => {
+      console.log("press: ", e);
+      if (selectRow >= 0 && e.code === "Enter") {
+        const appName = app[selectRow];
+        executeApp(appName);
+      }
+    },
+    [selectRow, app]
+  );
+
+  useEffect(() => {
+    document.addEventListener("keydown", pressEnter);
+    return () => {
+      document.removeEventListener("keydown", pressEnter);
+    };
+  }, [pressEnter]);
 
   return (
     <Command
@@ -101,13 +162,20 @@ export default function Search() {
       />
       <CommandList>
         {app.length > 0 ? (
-          app.map((item) => (
+          app.map((item, index) => (
             <div
               className=" my-2"
               key={item}
+              ref={(el) => {
+                if (el) {
+                  appItemsRef.current[index] = el;
+                }
+              }}
             >
               <div
-                className="h-full w-full pl-4 py-2 cursor-pointer hover:bg-gray-100"
+                className={`h-full w-full pl-4 py-2 cursor-pointer hover:bg-gray-100 ${
+                  selectRow === index ? "bg-gray-100" : ""
+                }`}
                 onClick={() => executeApp(item)}
               >
                 {item}
@@ -115,7 +183,9 @@ export default function Search() {
             </div>
           ))
         ) : (
-          <CommandEmpty>没有找到app。</CommandEmpty>
+          <CommandEmpty>
+            {searchValue.trim() === "" ? "请输入app名称。" : "没有找到app。"}
+          </CommandEmpty>
         )}
       </CommandList>
     </Command>

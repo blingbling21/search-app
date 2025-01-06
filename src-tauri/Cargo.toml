@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "search-app"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -28,6 +28,9 @@ rdev = "0.5.3"
 winreg = "0.52.0"
 tracing-subscriber = "0.3.19"
 tracing = "0.1.41"
+config = "0.15.3"
+rfd = "0.15.1"
+tracing-appender = "0.2.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
